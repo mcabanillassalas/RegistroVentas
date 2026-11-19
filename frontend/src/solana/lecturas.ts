@@ -3,10 +3,14 @@ import type { Address } from "@solana/kit";
 import {
   fetchAllCliente,
   fetchAllVenta,
+  fetchAllProducto,
+  fetchAllVentaInventario,
+  fetchMaybeHistorialVentasV2,
+  fetchMaybeInventario,
   fetchMaybeRegistro,
 } from "../../clients/js/src/generated";
 import { rpc } from "./conexion";
-import { pdaRegistro } from "./pdas";
+import { pdaHistorialVentasV2, pdaInventario, pdaRegistro } from "./pdas";
 
 /*
 LECTURAS — ya resueltas
@@ -33,6 +37,29 @@ export type RegistroUI = {
   clientes: ClienteUI[];
 };
 
+export type InventarioUI = {
+  direccion: Address;
+  siguienteIdVenta: number;
+  productos: {
+    direccion: Address;
+    sku: string;
+    descripcion: string;
+    precioUnitario: number;
+    stock: number;
+    activo: boolean;
+  }[];
+  ventas: {
+    direccion: Address;
+    idVenta: number;
+    idCliente: number;
+    sku: string;
+    descripcion: string;
+    cantidad: number;
+    precioUnitario: number;
+    total: bigint;
+  }[];
+};
+
 /*
 Tres niveles de cuentas, tres niveles de lectura: el registro guarda las
 direcciones de sus clientes, y cada cliente las de sus ventas. Esa es la
@@ -51,11 +78,15 @@ export async function leerRegistro(
 
   if (!cuenta.exists) return null;
 
-  const clientes = await fetchAllCliente(rpc, cuenta.data.clientes);
+  const clientes = cuenta.data.clientes.length
+    ? await fetchAllCliente(rpc, cuenta.data.clientes)
+    : [];
 
   const conVentas = await Promise.all(
     clientes.map(async (c) => {
-      const ventas = await fetchAllVenta(rpc, c.data.historial);
+      const ventas = c.data.historial.length
+        ? await fetchAllVenta(rpc, c.data.historial)
+        : [];
       return {
         direccion: c.address,
         idCliente: c.data.idCliente,
@@ -95,4 +126,59 @@ export async function siguienteId(
   if (cuenta.data.clientes.length >= 10) throw new Error("El registro alcanzó las 10 referencias de clientes previstas para el ejercicio.");
   if (cuenta.data.idCounter >= 65_535) throw new Error("Se agotaron los identificadores u16 del registro.");
   return cuenta.data.idCounter + 1;
+}
+
+export async function leerInventarioV2(
+  direccionRegistro: Address,
+  clientes: Pick<ClienteUI, "direccion" | "idCliente">[]
+): Promise<InventarioUI | null> {
+  const direccion = pdaInventario(direccionRegistro);
+  const cuenta = await fetchMaybeInventario(rpc, direccion);
+  if (!cuenta.exists) return null;
+
+  const productos = cuenta.data.productos.length
+    ? await fetchAllProducto(rpc, cuenta.data.productos)
+    : [];
+  const historiales = await Promise.all(
+    clientes.map(async (cliente) => ({
+      idCliente: cliente.idCliente,
+      cuenta: await fetchMaybeHistorialVentasV2(
+        rpc,
+        pdaHistorialVentasV2(cliente.direccion)
+      ),
+    }))
+  );
+  const ventasPorCliente = await Promise.all(
+    historiales.map(async ({ idCliente, cuenta: historial }) => ({
+      idCliente,
+      ventas: historial.exists && historial.data.ventas.length
+        ? await fetchAllVentaInventario(rpc, historial.data.ventas)
+        : [],
+    }))
+  );
+
+  return {
+    direccion,
+    siguienteIdVenta: cuenta.data.siguienteIdVenta,
+    productos: productos.map((producto) => ({
+      direccion: producto.address,
+      sku: producto.data.sku,
+      descripcion: producto.data.descripcion,
+      precioUnitario: producto.data.precioUnitario,
+      stock: producto.data.stock,
+      activo: producto.data.activo,
+    })),
+    ventas: ventasPorCliente.flatMap(({ idCliente, ventas }) =>
+      ventas.map((venta) => ({
+        direccion: venta.address,
+        idVenta: venta.data.idVenta,
+        idCliente,
+        sku: venta.data.sku,
+        descripcion: venta.data.descripcion,
+        cantidad: venta.data.cantidad,
+        precioUnitario: venta.data.precioUnitario,
+        total: venta.data.total,
+      }))
+    ),
+  };
 }

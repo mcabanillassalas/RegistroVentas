@@ -36,45 +36,97 @@ import {
 } from "@solana/program-client-core";
 import {
   getClienteCodec,
+  getHistorialVentasV2Codec,
+  getInventarioCodec,
+  getProductoCodec,
   getRegistroCodec,
   getVentaCodec,
+  getVentaInventarioCodec,
   type Cliente,
   type ClienteArgs,
+  type HistorialVentasV2,
+  type HistorialVentasV2Args,
+  type Inventario,
+  type InventarioArgs,
+  type Producto,
+  type ProductoArgs,
   type Registro,
   type RegistroArgs,
   type Venta,
   type VentaArgs,
+  type VentaInventario,
+  type VentaInventarioArgs,
 } from "../accounts";
 import {
+  getActualizarProductoInstruction,
+  getAjustarCantidadVentaInstruction,
   getCambiarMontoInstruction,
   getCrearClienteInstruction,
+  getCrearProductoInstruction,
   getCrearRegistroInstruction,
+  getDevolverVentaInventarioInstruction,
+  getEliminarClienteInstruction,
   getHacerDevolucionInstruction,
+  getInicializarHistorialVentasV2Instruction,
+  getInicializarInventarioInstruction,
+  getReabastecerProductoInstruction,
   getRegistrarVentaInstruction,
+  getRegistrarVentaInventarioInstruction,
+  parseActualizarProductoInstruction,
+  parseAjustarCantidadVentaInstruction,
   parseCambiarMontoInstruction,
   parseCrearClienteInstruction,
+  parseCrearProductoInstruction,
   parseCrearRegistroInstruction,
+  parseDevolverVentaInventarioInstruction,
+  parseEliminarClienteInstruction,
   parseHacerDevolucionInstruction,
+  parseInicializarHistorialVentasV2Instruction,
+  parseInicializarInventarioInstruction,
+  parseReabastecerProductoInstruction,
   parseRegistrarVentaInstruction,
+  parseRegistrarVentaInventarioInstruction,
+  type ActualizarProductoInput,
+  type AjustarCantidadVentaInput,
   type CambiarMontoInput,
   type CrearClienteInput,
+  type CrearProductoInput,
   type CrearRegistroInput,
+  type DevolverVentaInventarioInput,
+  type EliminarClienteInput,
   type HacerDevolucionInput,
+  type InicializarHistorialVentasV2Input,
+  type InicializarInventarioInput,
+  type ParsedActualizarProductoInstruction,
+  type ParsedAjustarCantidadVentaInstruction,
   type ParsedCambiarMontoInstruction,
   type ParsedCrearClienteInstruction,
+  type ParsedCrearProductoInstruction,
   type ParsedCrearRegistroInstruction,
+  type ParsedDevolverVentaInventarioInstruction,
+  type ParsedEliminarClienteInstruction,
   type ParsedHacerDevolucionInstruction,
+  type ParsedInicializarHistorialVentasV2Instruction,
+  type ParsedInicializarInventarioInstruction,
+  type ParsedReabastecerProductoInstruction,
   type ParsedRegistrarVentaInstruction,
+  type ParsedRegistrarVentaInventarioInstruction,
+  type ReabastecerProductoInput,
   type RegistrarVentaInput,
+  type RegistrarVentaInventarioInput,
 } from "../instructions";
 
 export const REGISTRO_PROGRAM_ADDRESS =
-  "38oTMyvUTmqkBQeMiuok5F2mPjp9dVadWdBeQTDNmTUY" as Address<"38oTMyvUTmqkBQeMiuok5F2mPjp9dVadWdBeQTDNmTUY">;
+  "4dJoKhvY2XC6WpHv8b7RCHKsTfUpGpELiDjAjf4grcE3" as Address<"4dJoKhvY2XC6WpHv8b7RCHKsTfUpGpELiDjAjf4grcE3">;
 
 export enum RegistroAccount {
   Registro,
   Cliente,
   Venta,
+  Inventario,
+  Producto,
+  HistorialVentasV2,
+  VentaInventario,
 }
 
 export function identifyRegistroAccount(
@@ -114,6 +166,50 @@ export function identifyRegistroAccount(
   ) {
     return RegistroAccount.Venta;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([137, 182, 163, 65, 195, 235, 85, 12]),
+      ),
+      0,
+    )
+  ) {
+    return RegistroAccount.Inventario;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([207, 24, 37, 22, 48, 57, 208, 98]),
+      ),
+      0,
+    )
+  ) {
+    return RegistroAccount.Producto;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([8, 45, 60, 14, 79, 193, 252, 252]),
+      ),
+      0,
+    )
+  ) {
+    return RegistroAccount.HistorialVentasV2;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([109, 242, 108, 232, 112, 6, 203, 95]),
+      ),
+      0,
+    )
+  ) {
+    return RegistroAccount.VentaInventario;
+  }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_ACCOUNT,
     { accountData: data, programName: "registro" },
@@ -123,9 +219,18 @@ export function identifyRegistroAccount(
 export enum RegistroInstruction {
   CrearRegistro,
   CrearCliente,
+  EliminarCliente,
   RegistrarVenta,
   HacerDevolucion,
   CambiarMonto,
+  InicializarInventario,
+  InicializarHistorialVentasV2,
+  CrearProducto,
+  ReabastecerProducto,
+  ActualizarProducto,
+  RegistrarVentaInventario,
+  AjustarCantidadVenta,
+  DevolverVentaInventario,
 }
 
 export function identifyRegistroInstruction(
@@ -153,6 +258,17 @@ export function identifyRegistroInstruction(
     )
   ) {
     return RegistroInstruction.CrearCliente;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([205, 132, 251, 133, 247, 51, 204, 55]),
+      ),
+      0,
+    )
+  ) {
+    return RegistroInstruction.EliminarCliente;
   }
   if (
     containsBytes(
@@ -187,6 +303,94 @@ export function identifyRegistroInstruction(
   ) {
     return RegistroInstruction.CambiarMonto;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([192, 19, 125, 147, 208, 69, 211, 127]),
+      ),
+      0,
+    )
+  ) {
+    return RegistroInstruction.InicializarInventario;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([115, 93, 108, 155, 7, 201, 51, 143]),
+      ),
+      0,
+    )
+  ) {
+    return RegistroInstruction.InicializarHistorialVentasV2;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([25, 110, 231, 187, 65, 141, 133, 201]),
+      ),
+      0,
+    )
+  ) {
+    return RegistroInstruction.CrearProducto;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([98, 195, 83, 111, 129, 88, 250, 141]),
+      ),
+      0,
+    )
+  ) {
+    return RegistroInstruction.ReabastecerProducto;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([210, 164, 52, 252, 33, 7, 60, 41]),
+      ),
+      0,
+    )
+  ) {
+    return RegistroInstruction.ActualizarProducto;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([103, 136, 99, 141, 171, 116, 83, 227]),
+      ),
+      0,
+    )
+  ) {
+    return RegistroInstruction.RegistrarVentaInventario;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([117, 114, 145, 208, 216, 24, 39, 188]),
+      ),
+      0,
+    )
+  ) {
+    return RegistroInstruction.AjustarCantidadVenta;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([164, 79, 107, 144, 160, 227, 238, 144]),
+      ),
+      0,
+    )
+  ) {
+    return RegistroInstruction.DevolverVentaInventario;
+  }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_INSTRUCTION,
     { instructionData: data, programName: "registro" },
@@ -194,7 +398,7 @@ export function identifyRegistroInstruction(
 }
 
 export type ParsedRegistroInstruction<
-  TProgram extends string = "38oTMyvUTmqkBQeMiuok5F2mPjp9dVadWdBeQTDNmTUY",
+  TProgram extends string = "4dJoKhvY2XC6WpHv8b7RCHKsTfUpGpELiDjAjf4grcE3",
 > =
   | ({
       instructionType: RegistroInstruction.CrearRegistro;
@@ -203,6 +407,9 @@ export type ParsedRegistroInstruction<
       instructionType: RegistroInstruction.CrearCliente;
     } & ParsedCrearClienteInstruction<TProgram>)
   | ({
+      instructionType: RegistroInstruction.EliminarCliente;
+    } & ParsedEliminarClienteInstruction<TProgram>)
+  | ({
       instructionType: RegistroInstruction.RegistrarVenta;
     } & ParsedRegistrarVentaInstruction<TProgram>)
   | ({
@@ -210,7 +417,31 @@ export type ParsedRegistroInstruction<
     } & ParsedHacerDevolucionInstruction<TProgram>)
   | ({
       instructionType: RegistroInstruction.CambiarMonto;
-    } & ParsedCambiarMontoInstruction<TProgram>);
+    } & ParsedCambiarMontoInstruction<TProgram>)
+  | ({
+      instructionType: RegistroInstruction.InicializarInventario;
+    } & ParsedInicializarInventarioInstruction<TProgram>)
+  | ({
+      instructionType: RegistroInstruction.InicializarHistorialVentasV2;
+    } & ParsedInicializarHistorialVentasV2Instruction<TProgram>)
+  | ({
+      instructionType: RegistroInstruction.CrearProducto;
+    } & ParsedCrearProductoInstruction<TProgram>)
+  | ({
+      instructionType: RegistroInstruction.ReabastecerProducto;
+    } & ParsedReabastecerProductoInstruction<TProgram>)
+  | ({
+      instructionType: RegistroInstruction.ActualizarProducto;
+    } & ParsedActualizarProductoInstruction<TProgram>)
+  | ({
+      instructionType: RegistroInstruction.RegistrarVentaInventario;
+    } & ParsedRegistrarVentaInventarioInstruction<TProgram>)
+  | ({
+      instructionType: RegistroInstruction.AjustarCantidadVenta;
+    } & ParsedAjustarCantidadVentaInstruction<TProgram>)
+  | ({
+      instructionType: RegistroInstruction.DevolverVentaInventario;
+    } & ParsedDevolverVentaInventarioInstruction<TProgram>);
 
 export function parseRegistroInstruction<TProgram extends string>(
   instruction: Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array>,
@@ -229,6 +460,13 @@ export function parseRegistroInstruction<TProgram extends string>(
       return {
         instructionType: RegistroInstruction.CrearCliente,
         ...parseCrearClienteInstruction(instruction),
+      };
+    }
+    case RegistroInstruction.EliminarCliente: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: RegistroInstruction.EliminarCliente,
+        ...parseEliminarClienteInstruction(instruction),
       };
     }
     case RegistroInstruction.RegistrarVenta: {
@@ -250,6 +488,62 @@ export function parseRegistroInstruction<TProgram extends string>(
       return {
         instructionType: RegistroInstruction.CambiarMonto,
         ...parseCambiarMontoInstruction(instruction),
+      };
+    }
+    case RegistroInstruction.InicializarInventario: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: RegistroInstruction.InicializarInventario,
+        ...parseInicializarInventarioInstruction(instruction),
+      };
+    }
+    case RegistroInstruction.InicializarHistorialVentasV2: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: RegistroInstruction.InicializarHistorialVentasV2,
+        ...parseInicializarHistorialVentasV2Instruction(instruction),
+      };
+    }
+    case RegistroInstruction.CrearProducto: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: RegistroInstruction.CrearProducto,
+        ...parseCrearProductoInstruction(instruction),
+      };
+    }
+    case RegistroInstruction.ReabastecerProducto: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: RegistroInstruction.ReabastecerProducto,
+        ...parseReabastecerProductoInstruction(instruction),
+      };
+    }
+    case RegistroInstruction.ActualizarProducto: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: RegistroInstruction.ActualizarProducto,
+        ...parseActualizarProductoInstruction(instruction),
+      };
+    }
+    case RegistroInstruction.RegistrarVentaInventario: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: RegistroInstruction.RegistrarVentaInventario,
+        ...parseRegistrarVentaInventarioInstruction(instruction),
+      };
+    }
+    case RegistroInstruction.AjustarCantidadVenta: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: RegistroInstruction.AjustarCantidadVenta,
+        ...parseAjustarCantidadVentaInstruction(instruction),
+      };
+    }
+    case RegistroInstruction.DevolverVentaInventario: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: RegistroInstruction.DevolverVentaInventario,
+        ...parseDevolverVentaInventarioInstruction(instruction),
       };
     }
     default:
@@ -275,6 +569,14 @@ export type RegistroPluginAccounts = {
     SelfFetchFunctions<ClienteArgs, Cliente>;
   venta: ReturnType<typeof getVentaCodec> &
     SelfFetchFunctions<VentaArgs, Venta>;
+  inventario: ReturnType<typeof getInventarioCodec> &
+    SelfFetchFunctions<InventarioArgs, Inventario>;
+  producto: ReturnType<typeof getProductoCodec> &
+    SelfFetchFunctions<ProductoArgs, Producto>;
+  historialVentasV2: ReturnType<typeof getHistorialVentasV2Codec> &
+    SelfFetchFunctions<HistorialVentasV2Args, HistorialVentasV2>;
+  ventaInventario: ReturnType<typeof getVentaInventarioCodec> &
+    SelfFetchFunctions<VentaInventarioArgs, VentaInventario>;
 };
 
 export type RegistroPluginInstructions = {
@@ -287,6 +589,11 @@ export type RegistroPluginInstructions = {
     input: CrearClienteInput,
     config?: { programAddress?: Address | HasAddress },
   ) => ReturnType<typeof getCrearClienteInstruction> & SelfPlanAndSendFunctions;
+  eliminarCliente: (
+    input: EliminarClienteInput,
+    config?: { programAddress?: Address | HasAddress },
+  ) => ReturnType<typeof getEliminarClienteInstruction> &
+    SelfPlanAndSendFunctions;
   registrarVenta: (
     input: RegistrarVentaInput,
     config?: { programAddress?: Address | HasAddress },
@@ -301,6 +608,46 @@ export type RegistroPluginInstructions = {
     input: CambiarMontoInput,
     config?: { programAddress?: Address | HasAddress },
   ) => ReturnType<typeof getCambiarMontoInstruction> & SelfPlanAndSendFunctions;
+  inicializarInventario: (
+    input: InicializarInventarioInput,
+    config?: { programAddress?: Address | HasAddress },
+  ) => ReturnType<typeof getInicializarInventarioInstruction> &
+    SelfPlanAndSendFunctions;
+  inicializarHistorialVentasV2: (
+    input: InicializarHistorialVentasV2Input,
+    config?: { programAddress?: Address | HasAddress },
+  ) => ReturnType<typeof getInicializarHistorialVentasV2Instruction> &
+    SelfPlanAndSendFunctions;
+  crearProducto: (
+    input: CrearProductoInput,
+    config?: { programAddress?: Address | HasAddress },
+  ) => ReturnType<typeof getCrearProductoInstruction> &
+    SelfPlanAndSendFunctions;
+  reabastecerProducto: (
+    input: ReabastecerProductoInput,
+    config?: { programAddress?: Address | HasAddress },
+  ) => ReturnType<typeof getReabastecerProductoInstruction> &
+    SelfPlanAndSendFunctions;
+  actualizarProducto: (
+    input: ActualizarProductoInput,
+    config?: { programAddress?: Address | HasAddress },
+  ) => ReturnType<typeof getActualizarProductoInstruction> &
+    SelfPlanAndSendFunctions;
+  registrarVentaInventario: (
+    input: RegistrarVentaInventarioInput,
+    config?: { programAddress?: Address | HasAddress },
+  ) => ReturnType<typeof getRegistrarVentaInventarioInstruction> &
+    SelfPlanAndSendFunctions;
+  ajustarCantidadVenta: (
+    input: AjustarCantidadVentaInput,
+    config?: { programAddress?: Address | HasAddress },
+  ) => ReturnType<typeof getAjustarCantidadVentaInstruction> &
+    SelfPlanAndSendFunctions;
+  devolverVentaInventario: (
+    input: DevolverVentaInventarioInput,
+    config?: { programAddress?: Address | HasAddress },
+  ) => ReturnType<typeof getDevolverVentaInventarioInstruction> &
+    SelfPlanAndSendFunctions;
 };
 
 export type RegistroPluginRequirements = ClientWithRpc<
@@ -321,6 +668,16 @@ export function registroProgram(
           registro: addSelfFetchFunctions(client, getRegistroCodec()),
           cliente: addSelfFetchFunctions(client, getClienteCodec()),
           venta: addSelfFetchFunctions(client, getVentaCodec()),
+          inventario: addSelfFetchFunctions(client, getInventarioCodec()),
+          producto: addSelfFetchFunctions(client, getProductoCodec()),
+          historialVentasV2: addSelfFetchFunctions(
+            client,
+            getHistorialVentasV2Codec(),
+          ),
+          ventaInventario: addSelfFetchFunctions(
+            client,
+            getVentaInventarioCodec(),
+          ),
         },
         instructions: {
           crearRegistro: (input, instructionConfig) =>
@@ -335,6 +692,14 @@ export function registroProgram(
             addSelfPlanAndSendFunctions(
               client,
               getCrearClienteInstruction(input, {
+                programAddress:
+                  instructionConfig?.programAddress ?? config.programAddress,
+              }),
+            ),
+          eliminarCliente: (input, instructionConfig) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getEliminarClienteInstruction(input, {
                 programAddress:
                   instructionConfig?.programAddress ?? config.programAddress,
               }),
@@ -359,6 +724,70 @@ export function registroProgram(
             addSelfPlanAndSendFunctions(
               client,
               getCambiarMontoInstruction(input, {
+                programAddress:
+                  instructionConfig?.programAddress ?? config.programAddress,
+              }),
+            ),
+          inicializarInventario: (input, instructionConfig) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getInicializarInventarioInstruction(input, {
+                programAddress:
+                  instructionConfig?.programAddress ?? config.programAddress,
+              }),
+            ),
+          inicializarHistorialVentasV2: (input, instructionConfig) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getInicializarHistorialVentasV2Instruction(input, {
+                programAddress:
+                  instructionConfig?.programAddress ?? config.programAddress,
+              }),
+            ),
+          crearProducto: (input, instructionConfig) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCrearProductoInstruction(input, {
+                programAddress:
+                  instructionConfig?.programAddress ?? config.programAddress,
+              }),
+            ),
+          reabastecerProducto: (input, instructionConfig) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getReabastecerProductoInstruction(input, {
+                programAddress:
+                  instructionConfig?.programAddress ?? config.programAddress,
+              }),
+            ),
+          actualizarProducto: (input, instructionConfig) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getActualizarProductoInstruction(input, {
+                programAddress:
+                  instructionConfig?.programAddress ?? config.programAddress,
+              }),
+            ),
+          registrarVentaInventario: (input, instructionConfig) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getRegistrarVentaInventarioInstruction(input, {
+                programAddress:
+                  instructionConfig?.programAddress ?? config.programAddress,
+              }),
+            ),
+          ajustarCantidadVenta: (input, instructionConfig) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAjustarCantidadVentaInstruction(input, {
+                programAddress:
+                  instructionConfig?.programAddress ?? config.programAddress,
+              }),
+            ),
+          devolverVentaInventario: (input, instructionConfig) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getDevolverVentaInventarioInstruction(input, {
                 programAddress:
                   instructionConfig?.programAddress ?? config.programAddress,
               }),

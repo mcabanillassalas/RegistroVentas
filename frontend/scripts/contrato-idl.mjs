@@ -6,19 +6,41 @@ const normalizar = (valor) => String(valor).replace(/_/g, '').toLowerCase();
 const requeridas = {
   crearregistro: ['nombrenegocio'],
   crearcliente: ['nombre'],
+  eliminarcliente: ['idcliente'],
   registrarventa: ['idcliente', 'sku', 'descripcion', 'monto'],
   cambiarmonto: ['idcliente', 'sku', 'nuevomonto'],
   hacerdevolucion: ['idcliente', 'sku'],
+  inicializarinventario: [],
+  inicializarhistorialventasv2: ['idcliente'],
+  crearproducto: ['sku', 'descripcion', 'preciounitario', 'stockinicial'],
+  reabastecerproducto: ['sku', 'cantidad'],
+  actualizarproducto: ['sku', 'descripcion', 'preciounitario', 'activo'],
+  registrarventainventario: ['idcliente', 'idventa', 'sku', 'cantidad'],
+  ajustarcantidadventa: ['idventa', 'idcliente', 'sku', 'nuevacantidad'],
+  devolverventainventario: ['idventa', 'idcliente', 'sku'],
 };
 const tiposArgumentos = {
   crearregistro: ['string'], crearcliente: ['string'],
+  eliminarcliente: ['u16'],
   registrarventa: ['u16', 'string', 'string', 'u32'],
   cambiarmonto: ['u16', 'string', 'u32'], hacerdevolucion: ['u16', 'string'],
+  inicializarinventario: [],
+  inicializarhistorialventasv2: ['u16'],
+  crearproducto: ['string', 'string', 'u32', 'u32'],
+  reabastecerproducto: ['string', 'u32'],
+  actualizarproducto: ['string', 'string', 'u32', 'bool'],
+  registrarventainventario: ['u16', 'u32', 'string', 'u32'],
+  ajustarcantidadventa: ['u32', 'u16', 'string', 'u32'],
+  devolverventainventario: ['u32', 'u16', 'string'],
 };
 const camposEsperados = {
   registro: [['owner', 'pubkey'], ['nombrenegocio', 'string'], ['clientes', 'vec:pubkey'], ['idcounter', 'u16']],
   cliente: [['idcliente', 'u16'], ['nombre', 'string'], ['compras', 'u16'], ['historial', 'vec:pubkey']],
   venta: [['sku', 'string'], ['descripcion', 'string'], ['monto', 'u32']],
+  inventario: [['registro', 'pubkey'], ['productos', 'vec:pubkey'], ['siguienteidventa', 'u32']],
+  producto: [['registro', 'pubkey'], ['sku', 'string'], ['descripcion', 'string'], ['preciounitario', 'u32'], ['stock', 'u32'], ['activo', 'bool']],
+  historialventasv2: [['cliente', 'pubkey'], ['ventas', 'vec:pubkey']],
+  ventainventario: [['idventa', 'u32'], ['idcliente', 'u16'], ['cliente', 'pubkey'], ['producto', 'pubkey'], ['sku', 'string'], ['descripcion', 'string'], ['cantidad', 'u32'], ['preciounitario', 'u32'], ['total', 'u64']],
 };
 const tipo = (valor) => typeof valor === 'string'
   ? (valor === 'publicKey' ? 'pubkey' : valor)
@@ -43,7 +65,7 @@ export function validarIdl(idl, programIdOpcional) {
       throw new Error('Los tipos de los argumentos de ' + nombre + ' no coinciden con el programa del bootcamp.');
     }
   }
-  for (const cuenta of ['registro', 'cliente', 'venta']) {
+  for (const cuenta of Object.keys(camposEsperados)) {
     if (!idl.accounts?.some((item) => normalizar(item.name) === cuenta)) {
       throw new Error('Falta el tipo de cuenta ' + cuenta);
     }

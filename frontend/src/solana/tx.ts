@@ -82,8 +82,8 @@ export function traducir(error: unknown): string {
   const texto = detalle(error);
   if (/user rejected|rejected the request|rechazaste|request rejected/i.test(texto)) return 'La firma fue cancelada en la wallet. Puedes volver a intentarlo.';
   if (/ConstraintSeeds|seeds constraint/i.test(texto)) return 'Las cuentas no corresponden a las semillas esperadas. Revisa negocio, autoridad, cliente y SKU.';
-  if (/AccountNotInitialized|does not exist|Account does not exist/i.test(texto)) return 'No se encontró una de las cuentas. Crea primero el registro y el cliente correspondientes.';
-  if (/already in use|already initialized/i.test(texto)) return 'Esa cuenta ya existe. El mismo cliente solo puede tener una venta activa por SKU.';
+  if (/AccountNotInitialized|does not exist|Account does not exist/i.test(texto)) return 'No se encontró una de las cuentas requeridas. Comprueba que el registro, inventario, cliente y producto estén inicializados.';
+  if (/already in use|already initialized/i.test(texto)) return 'La cuenta ya existe. Comprueba si el registro, inventario o producto ya fueron inicializados, o si la venta V1 de ese SKU sigue activa.';
   const coincidencia = texto.match(/custom program error:\s*(0x[0-9a-f]+|\d+)/i) ?? texto.match(/"Custom"\s*:\s*(\d+)/);
   if (coincidencia) {
     const codigo = Number(coincidencia[1]);

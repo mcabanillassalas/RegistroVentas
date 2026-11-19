@@ -36,6 +36,22 @@ export function pdaVenta(cliente: Address, sku: string) {
   return derivar([s.texto("venta"), s.cuenta(cliente), s.texto(sku)]);
 }
 
+export function pdaInventario(registro: Address) {
+  return derivar([s.texto("inventario"), s.cuenta(registro)]);
+}
+
+export function pdaProducto(registro: Address, sku: string) {
+  return derivar([s.texto("producto"), s.cuenta(registro), s.texto(sku)]);
+}
+
+export function pdaHistorialVentasV2(cliente: Address) {
+  return derivar([s.texto("historial_ventas_v2"), s.cuenta(cliente)]);
+}
+
+export function pdaVentaInventario(inventario: Address, idVenta: number) {
+  return derivar([s.texto("venta_v2"), s.cuenta(inventario), s.u32(idVenta)]);
+}
+
 /*
 Las tres instrucciones de venta necesitan las tres cuentas, porque el programa
 valida la cadena completa en el contexto. Derivarlas de una vez evita repetir

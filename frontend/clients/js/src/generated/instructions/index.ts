@@ -6,8 +6,17 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./actualizarProducto";
+export * from "./ajustarCantidadVenta";
 export * from "./cambiarMonto";
 export * from "./crearCliente";
+export * from "./crearProducto";
 export * from "./crearRegistro";
+export * from "./devolverVentaInventario";
+export * from "./eliminarCliente";
 export * from "./hacerDevolucion";
+export * from "./inicializarHistorialVentasV2";
+export * from "./inicializarInventario";
+export * from "./reabastecerProducto";
 export * from "./registrarVenta";
+export * from "./registrarVentaInventario";

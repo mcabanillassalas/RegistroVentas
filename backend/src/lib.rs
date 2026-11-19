@@ -1,6 +1,9 @@
 use anchor_lang::prelude::*;
 
-declare_id!("");
+declare_id!("4dJoKhvY2XC6WpHv8b7RCHKsTfUpGpELiDjAjf4grcE3");
+
+const MAX_PRODUCTOS: usize = 20;
+const MAX_VENTAS_V2: usize = 10;
 
 #[program]
 pub mod registro {
@@ -44,6 +47,47 @@ pub mod registro {
 
         msg!("Cliente {} creado con id: {}", nombre, id_cliente); // Log de verificacion
 
+        Ok(())
+    }
+
+    /////////////////////////// Dar de baja Cliente ///////////////////////////
+    pub fn eliminar_cliente(context: Context<EliminarCliente>, _id_cliente: u16) -> Result<()> {
+        let cliente_key = context.accounts.cliente.key();
+        validar_cliente_sin_ventas(
+            context.accounts.cliente.compras,
+            &context.accounts.cliente.historial,
+            &[],
+        )?;
+
+        let historial_info = context.accounts.historial_v2.to_account_info();
+        let historial_v2_inicializado = if historial_info.owner == &crate::ID {
+            let data = historial_info.try_borrow_data()?;
+            let mut data_ref: &[u8] = &data;
+            let historial = HistorialVentasV2::try_deserialize(&mut data_ref)?;
+            require!(
+                historial.cliente == cliente_key,
+                Errores::HistorialInvalido
+            );
+            validar_cliente_sin_ventas(0, &[], &historial.ventas)?;
+            true
+        } else {
+            require!(
+                historial_info.owner == &system_program::ID && historial_info.data_is_empty(),
+                Errores::HistorialInvalido
+            );
+            false
+        };
+
+        quitar_referencia_cliente(&mut context.accounts.registro, cliente_key)?;
+
+        if historial_v2_inicializado {
+            cerrar_cuenta_programa(
+                &historial_info,
+                &context.accounts.owner.to_account_info(),
+            )?;
+        }
+
+        msg!("Cliente {} dado de baja", context.accounts.cliente.id_cliente);
         Ok(())
     }
 
@@ -128,6 +172,217 @@ pub mod registro {
 
         Ok(())
     }
+
+    /////////////////////////// Inventario V2 ///////////////////////////
+
+    pub fn inicializar_inventario(context: Context<InicializarInventario>) -> Result<()> {
+        context.accounts.inventario.set_inner(Inventario {
+            registro: context.accounts.registro.key(),
+            productos: Vec::new(),
+            siguiente_id_venta: 1,
+        });
+        Ok(())
+    }
+
+    pub fn inicializar_historial_ventas_v2(
+        context: Context<InicializarHistorialVentasV2>,
+        _id_cliente: u16,
+    ) -> Result<()> {
+        context.accounts.historial.set_inner(HistorialVentasV2 {
+            cliente: context.accounts.cliente.key(),
+            ventas: Vec::new(),
+        });
+        Ok(())
+    }
+
+    pub fn crear_producto(
+        context: Context<CrearProducto>,
+        sku: String,
+        descripcion: String,
+        precio_unitario: u32,
+        stock_inicial: u32,
+    ) -> Result<()> {
+        validar_sku(&sku)?;
+        validar_descripcion(&descripcion)?;
+        require!(precio_unitario > 0, Errores::PrecioInvalido);
+        require!(
+            context.accounts.inventario.productos.len() < MAX_PRODUCTOS,
+            Errores::LimiteProductos
+        );
+
+        let producto_key = context.accounts.producto.key();
+        context.accounts.producto.set_inner(Producto {
+            registro: context.accounts.registro.key(),
+            sku,
+            descripcion,
+            precio_unitario,
+            stock: stock_inicial,
+            activo: true,
+        });
+        context.accounts.inventario.productos.push(producto_key);
+        Ok(())
+    }
+
+    pub fn reabastecer_producto(
+        context: Context<ModificarProducto>,
+        sku: String,
+        cantidad: u32,
+    ) -> Result<()> {
+        validar_sku(&sku)?;
+        require!(cantidad > 0, Errores::CantidadInvalida);
+        require!(context.accounts.producto.activo, Errores::ProductoInactivo);
+
+        context.accounts.producto.stock = context
+            .accounts
+            .producto
+            .stock
+            .checked_add(cantidad)
+            .ok_or_else(|| error!(Errores::OverflowStock))?;
+        Ok(())
+    }
+
+    pub fn actualizar_producto(
+        context: Context<ModificarProducto>,
+        sku: String,
+        descripcion: String,
+        precio_unitario: u32,
+        activo: bool,
+    ) -> Result<()> {
+        validar_sku(&sku)?;
+        validar_descripcion(&descripcion)?;
+        require!(precio_unitario > 0, Errores::PrecioInvalido);
+
+        let producto = &mut context.accounts.producto;
+        producto.descripcion = descripcion;
+        producto.precio_unitario = precio_unitario;
+        producto.activo = activo;
+        Ok(())
+    }
+
+    pub fn registrar_venta_inventario(
+        context: Context<NuevaVentaInventario>,
+        id_cliente: u16,
+        id_venta: u32,
+        sku: String,
+        cantidad: u32,
+    ) -> Result<()> {
+        validar_sku(&sku)?;
+        require!(cantidad > 0, Errores::CantidadInvalida);
+        require!(
+            context.accounts.inventario.siguiente_id_venta == id_venta,
+            Errores::IdVentaDesactualizado
+        );
+        require!(
+            context.accounts.historial.ventas.len() < MAX_VENTAS_V2,
+            Errores::LimiteVentas
+        );
+
+        let (producto_activo, producto_sku, stock_actual, precio_unitario, descripcion) = {
+            let producto = &context.accounts.producto;
+            (
+                producto.activo,
+                producto.sku.clone(),
+                producto.stock,
+                producto.precio_unitario,
+                producto.descripcion.clone(),
+            )
+        };
+        require!(producto_activo, Errores::ProductoInactivo);
+        require!(producto_sku == sku, Errores::ProductoInvalido);
+        require!(stock_actual >= cantidad, Errores::StockInsuficiente);
+
+        let total = calcular_total(precio_unitario, cantidad)?;
+        let siguiente_id = id_venta
+            .checked_add(1)
+            .ok_or_else(|| error!(Errores::OverflowIdVenta))?;
+        let venta_key = context.accounts.venta.key();
+
+        context.accounts.venta.set_inner(VentaInventario {
+            id_venta,
+            id_cliente,
+            cliente: context.accounts.cliente.key(),
+            producto: context.accounts.producto.key(),
+            sku,
+            descripcion,
+            cantidad,
+            precio_unitario,
+            total,
+        });
+        context.accounts.producto.stock = stock_actual
+            .checked_sub(cantidad)
+            .ok_or_else(|| error!(Errores::StockInsuficiente))?;
+        context.accounts.inventario.siguiente_id_venta = siguiente_id;
+        context.accounts.historial.ventas.push(venta_key);
+        Ok(())
+    }
+
+    pub fn ajustar_cantidad_venta(
+        context: Context<AjustarCantidadVenta>,
+        id_venta: u32,
+        _id_cliente: u16,
+        sku: String,
+        nueva_cantidad: u32,
+    ) -> Result<()> {
+        validar_sku(&sku)?;
+        require!(nueva_cantidad > 0, Errores::CantidadInvalida);
+        validar_venta_v2(
+            &context.accounts.venta,
+            context.accounts.cliente.key(),
+            context.accounts.producto.key(),
+            &sku,
+            id_venta,
+            _id_cliente,
+        )?;
+
+        let cantidad_anterior = context.accounts.venta.cantidad;
+        let stock_ajustado = calcular_stock_ajustado(
+            context.accounts.producto.stock,
+            cantidad_anterior,
+            nueva_cantidad,
+            context.accounts.producto.activo,
+        )?;
+        let total = calcular_total(context.accounts.venta.precio_unitario, nueva_cantidad)?;
+        context.accounts.producto.stock = stock_ajustado;
+        let venta = &mut context.accounts.venta;
+        venta.cantidad = nueva_cantidad;
+        venta.total = total;
+        Ok(())
+    }
+
+    pub fn devolver_venta_inventario(
+        context: Context<DevolverVentaInventario>,
+        id_venta: u32,
+        _id_cliente: u16,
+        sku: String,
+    ) -> Result<()> {
+        validar_sku(&sku)?;
+        validar_venta_v2(
+            &context.accounts.venta,
+            context.accounts.cliente.key(),
+            context.accounts.producto.key(),
+            &sku,
+            id_venta,
+            _id_cliente,
+        )?;
+
+        let venta_key = context.accounts.venta.key();
+        require!(
+            context.accounts.historial.ventas.contains(&venta_key),
+            Errores::NoSKU
+        );
+        context.accounts.producto.stock = context
+            .accounts
+            .producto
+            .stock
+            .checked_add(context.accounts.venta.cantidad)
+            .ok_or_else(|| error!(Errores::OverflowStock))?;
+        context
+            .accounts
+            .historial
+            .ventas
+            .retain(|&key| key != venta_key);
+        Ok(())
+    }
 }
 
 /////////////////////////// Codigos de Error ///////////////////////////
@@ -137,6 +392,190 @@ pub enum Errores {
     NoOwner,
     #[msg("Error, la venta no esta en el historial del cliente")]
     NoSKU,
+    #[msg("El SKU debe tener entre 1 y 5 bytes UTF-8")]
+    SkuInvalido,
+    #[msg("La descripcion debe tener entre 1 y 50 bytes UTF-8")]
+    DescripcionInvalida,
+    #[msg("El precio debe ser mayor que cero")]
+    PrecioInvalido,
+    #[msg("La cantidad debe ser mayor que cero")]
+    CantidadInvalida,
+    #[msg("El inventario pertenece a otro registro")]
+    InventarioInvalido,
+    #[msg("El producto no corresponde al registro o SKU")]
+    ProductoInvalido,
+    #[msg("El producto esta inactivo")]
+    ProductoInactivo,
+    #[msg("No hay existencias suficientes")]
+    StockInsuficiente,
+    #[msg("Se alcanzo el limite de productos del inventario")]
+    LimiteProductos,
+    #[msg("Se alcanzo el limite de ventas activas del cliente")]
+    LimiteVentas,
+    #[msg("El historial no corresponde al cliente")]
+    HistorialInvalido,
+    #[msg("La venta no corresponde al cliente, producto o identificador")]
+    VentaInvalida,
+    #[msg("El identificador de venta quedo desactualizado; vuelve a consultar")]
+    IdVentaDesactualizado,
+    #[msg("Se agotaron los identificadores de venta")]
+    OverflowIdVenta,
+    #[msg("El total excede el rango soportado")]
+    OverflowTotal,
+    #[msg("El stock excede el rango soportado")]
+    OverflowStock,
+    #[msg("No se puede dar de baja un cliente con ventas activas")]
+    ClienteConVentas,
+    #[msg("El cliente no aparece en el registro")]
+    ClienteNoRegistrado,
+}
+
+fn validar_sku(sku: &str) -> Result<()> {
+    require!(
+        !sku.trim().is_empty() && sku.len() <= 5,
+        Errores::SkuInvalido
+    );
+    Ok(())
+}
+
+fn validar_descripcion(descripcion: &str) -> Result<()> {
+    require!(
+        !descripcion.trim().is_empty() && descripcion.len() <= 50,
+        Errores::DescripcionInvalida
+    );
+    Ok(())
+}
+
+fn calcular_total(precio_unitario: u32, cantidad: u32) -> Result<u64> {
+    require!(precio_unitario > 0, Errores::PrecioInvalido);
+    require!(cantidad > 0, Errores::CantidadInvalida);
+    u64::from(precio_unitario)
+        .checked_mul(u64::from(cantidad))
+        .ok_or_else(|| error!(Errores::OverflowTotal))
+}
+
+fn calcular_stock_ajustado(
+    stock: u32,
+    cantidad_anterior: u32,
+    nueva_cantidad: u32,
+    producto_activo: bool,
+) -> Result<u32> {
+    require!(nueva_cantidad > 0, Errores::CantidadInvalida);
+    if nueva_cantidad > cantidad_anterior {
+        require!(producto_activo, Errores::ProductoInactivo);
+        stock
+            .checked_sub(nueva_cantidad - cantidad_anterior)
+            .ok_or_else(|| error!(Errores::StockInsuficiente))
+    } else {
+        stock
+            .checked_add(cantidad_anterior - nueva_cantidad)
+            .ok_or_else(|| error!(Errores::OverflowStock))
+    }
+}
+
+fn validar_cliente_sin_ventas(
+    compras: u16,
+    historial_v1: &[Pubkey],
+    historial_v2: &[Pubkey],
+) -> Result<()> {
+    require!(
+        compras == 0 && historial_v1.is_empty() && historial_v2.is_empty(),
+        Errores::ClienteConVentas
+    );
+    Ok(())
+}
+
+fn quitar_referencia_cliente(registro: &mut Registro, cliente: Pubkey) -> Result<()> {
+    let indice = registro
+        .clientes
+        .iter()
+        .position(|referencia| *referencia == cliente)
+        .ok_or_else(|| error!(Errores::ClienteNoRegistrado))?;
+    registro.clientes.remove(indice);
+    Ok(())
+}
+
+fn cerrar_cuenta_programa(cuenta: &AccountInfo, destino: &AccountInfo) -> Result<()> {
+    require!(cuenta.key != destino.key, Errores::HistorialInvalido);
+    destino.add_lamports(cuenta.lamports())?;
+    cuenta.sub_lamports(cuenta.lamports())?;
+    cuenta.assign(&system_program::ID);
+    cuenta.resize(0)?;
+    Ok(())
+}
+
+fn validar_venta_v2(
+    venta: &VentaInventario,
+    cliente: Pubkey,
+    producto: Pubkey,
+    sku: &str,
+    id_venta: u32,
+    id_cliente: u16,
+) -> Result<()> {
+    require!(
+        venta.cliente == cliente
+            && venta.producto == producto
+            && venta.sku == sku
+            && venta.id_venta == id_venta
+            && venta.id_cliente == id_cliente,
+        Errores::VentaInvalida
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn total_usa_aritmetica_u64_y_rechaza_ceros() {
+        assert_eq!(
+            calcular_total(u32::MAX, u32::MAX).unwrap(),
+            u64::from(u32::MAX) * u64::from(u32::MAX)
+        );
+        assert!(calcular_total(0, 1).is_err());
+        assert!(calcular_total(1, 0).is_err());
+    }
+
+    #[test]
+    fn ajustar_cantidad_aplica_solo_la_diferencia_al_stock() {
+        assert_eq!(calcular_stock_ajustado(8, 4, 6, true).unwrap(), 6);
+        assert_eq!(calcular_stock_ajustado(8, 4, 2, false).unwrap(), 10);
+        assert_eq!(calcular_stock_ajustado(8, 4, 4, false).unwrap(), 8);
+    }
+
+    #[test]
+    fn ajustar_cantidad_rechaza_stock_insuficiente_inactivo_y_overflow() {
+        assert!(calcular_stock_ajustado(3, 4, 8, true).is_err());
+        assert!(calcular_stock_ajustado(8, 4, 5, false).is_err());
+        assert!(calcular_stock_ajustado(u32::MAX, 2, 1, true).is_err());
+    }
+
+    #[test]
+    fn baja_solo_permite_cliente_sin_ventas_v1_ni_v2() {
+        let venta = Pubkey::new_unique();
+        assert!(validar_cliente_sin_ventas(0, &[], &[]).is_ok());
+        assert!(validar_cliente_sin_ventas(1, &[], &[]).is_err());
+        assert!(validar_cliente_sin_ventas(0, &[venta], &[]).is_err());
+        assert!(validar_cliente_sin_ventas(0, &[], &[venta]).is_err());
+    }
+
+    #[test]
+    fn baja_quita_solo_la_referencia_y_no_reutiliza_el_contador() {
+        let cliente = Pubkey::new_unique();
+        let otro_cliente = Pubkey::new_unique();
+        let mut registro = Registro {
+            owner: Pubkey::default(),
+            nombre_negocio: "Cafe".to_string(),
+            clientes: vec![cliente, otro_cliente],
+            id_counter: 2,
+        };
+
+        quitar_referencia_cliente(&mut registro, cliente).unwrap();
+        assert_eq!(registro.clientes, vec![otro_cliente]);
+        assert_eq!(registro.id_counter, 2);
+        assert!(quitar_referencia_cliente(&mut registro, cliente).is_err());
+    }
 }
 
 /////////////////////////// CUENTAS ///////////////////////////
@@ -184,6 +623,63 @@ pub struct Venta {
     descripcion: String,
 
     monto: u32,
+}
+
+/////////////////////////// Inventario V2 ///////////////////////////
+
+#[account]
+#[derive(InitSpace)]
+pub struct Inventario {
+    registro: Pubkey,
+
+    #[max_len(20)]
+    productos: Vec<Pubkey>,
+
+    siguiente_id_venta: u32,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct Producto {
+    registro: Pubkey,
+
+    #[max_len(5)]
+    sku: String,
+
+    #[max_len(50)]
+    descripcion: String,
+
+    precio_unitario: u32,
+    stock: u32,
+    activo: bool,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct HistorialVentasV2 {
+    cliente: Pubkey,
+
+    #[max_len(10)]
+    ventas: Vec<Pubkey>,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct VentaInventario {
+    id_venta: u32,
+    id_cliente: u16,
+    cliente: Pubkey,
+    producto: Pubkey,
+
+    #[max_len(5)]
+    sku: String,
+
+    #[max_len(50)]
+    descripcion: String,
+
+    cantidad: u32,
+    precio_unitario: u32,
+    total: u64,
 }
 
 /////////////////////////// CONTEXTOS ///////////////////////////
@@ -246,6 +742,32 @@ pub struct NuevoCliente<'info> {
     pub cliente: Account<'info, Cliente>,
 
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(id_cliente: u16)]
+pub struct EliminarCliente<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    #[account(mut, has_one = owner @ Errores::NoOwner)]
+    pub registro: Account<'info, Registro>,
+
+    #[account(
+        mut,
+        close = owner,
+        seeds = [b"cliente", registro.key().as_ref(), id_cliente.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub cliente: Account<'info, Cliente>,
+
+    /// CHECK: la PDA se valida aquí; el historial, si existe, se deserializa y valida en el handler.
+    #[account(
+        mut,
+        seeds = [b"historial_ventas_v2", cliente.key().as_ref()],
+        bump
+    )]
+    pub historial_v2: UncheckedAccount<'info>,
 }
 
 /////////////////////////// Nueva Venta ///////////////////////////
@@ -331,4 +853,241 @@ pub struct EliminarVenta<'info> {
         bump
     )]
     pub venta: Account<'info, Venta>,
+}
+
+/////////////////////////// Contextos Inventario V2 ///////////////////////////
+
+#[derive(Accounts)]
+pub struct InicializarInventario<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    #[account(has_one = owner @ Errores::NoOwner)]
+    pub registro: Account<'info, Registro>,
+
+    #[account(
+        init,
+        payer = owner,
+        space = Inventario::INIT_SPACE + 8,
+        seeds = [b"inventario", registro.key().as_ref()],
+        bump
+    )]
+    pub inventario: Account<'info, Inventario>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(id_cliente: u16)]
+pub struct InicializarHistorialVentasV2<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    #[account(has_one = owner @ Errores::NoOwner)]
+    pub registro: Account<'info, Registro>,
+
+    #[account(
+        seeds = [b"cliente", registro.key().as_ref(), id_cliente.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub cliente: Account<'info, Cliente>,
+
+    #[account(
+        init,
+        payer = owner,
+        space = HistorialVentasV2::INIT_SPACE + 8,
+        seeds = [b"historial_ventas_v2", cliente.key().as_ref()],
+        bump
+    )]
+    pub historial: Account<'info, HistorialVentasV2>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(sku: String)]
+pub struct CrearProducto<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    #[account(has_one = owner @ Errores::NoOwner)]
+    pub registro: Account<'info, Registro>,
+
+    #[account(
+        mut,
+        seeds = [b"inventario", registro.key().as_ref()],
+        bump,
+        constraint = inventario.registro == registro.key() @ Errores::InventarioInvalido
+    )]
+    pub inventario: Account<'info, Inventario>,
+
+    #[account(
+        init,
+        payer = owner,
+        space = Producto::INIT_SPACE + 8,
+        seeds = [b"producto", registro.key().as_ref(), sku.as_bytes()],
+        bump
+    )]
+    pub producto: Account<'info, Producto>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(sku: String)]
+pub struct ModificarProducto<'info> {
+    pub owner: Signer<'info>,
+
+    #[account(has_one = owner @ Errores::NoOwner)]
+    pub registro: Account<'info, Registro>,
+
+    #[account(
+        mut,
+        seeds = [b"producto", registro.key().as_ref(), sku.as_bytes()],
+        bump,
+        constraint = producto.registro == registro.key() @ Errores::ProductoInvalido
+    )]
+    pub producto: Account<'info, Producto>,
+}
+
+#[derive(Accounts)]
+#[instruction(id_cliente: u16, id_venta: u32, sku: String, cantidad: u32)]
+pub struct NuevaVentaInventario<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    #[account(has_one = owner @ Errores::NoOwner)]
+    pub registro: Account<'info, Registro>,
+
+    #[account(
+        seeds = [b"cliente", registro.key().as_ref(), id_cliente.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub cliente: Account<'info, Cliente>,
+
+    #[account(
+        mut,
+        seeds = [b"inventario", registro.key().as_ref()],
+        bump,
+        constraint = inventario.registro == registro.key() @ Errores::InventarioInvalido
+    )]
+    pub inventario: Account<'info, Inventario>,
+
+    #[account(
+        mut,
+        seeds = [b"producto", registro.key().as_ref(), sku.as_bytes()],
+        bump,
+        constraint = producto.registro == registro.key() @ Errores::ProductoInvalido
+    )]
+    pub producto: Account<'info, Producto>,
+
+    #[account(
+        mut,
+        seeds = [b"historial_ventas_v2", cliente.key().as_ref()],
+        bump,
+        constraint = historial.cliente == cliente.key() @ Errores::HistorialInvalido
+    )]
+    pub historial: Account<'info, HistorialVentasV2>,
+
+    #[account(
+        init,
+        payer = owner,
+        space = VentaInventario::INIT_SPACE + 8,
+        seeds = [b"venta_v2", inventario.key().as_ref(), id_venta.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub venta: Account<'info, VentaInventario>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(id_venta: u32, id_cliente: u16, sku: String)]
+pub struct AjustarCantidadVenta<'info> {
+    pub owner: Signer<'info>,
+
+    #[account(has_one = owner @ Errores::NoOwner)]
+    pub registro: Account<'info, Registro>,
+
+    #[account(
+        seeds = [b"cliente", registro.key().as_ref(), id_cliente.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub cliente: Account<'info, Cliente>,
+
+    #[account(
+        seeds = [b"inventario", registro.key().as_ref()],
+        bump,
+        constraint = inventario.registro == registro.key() @ Errores::InventarioInvalido
+    )]
+    pub inventario: Account<'info, Inventario>,
+
+    #[account(
+        mut,
+        seeds = [b"producto", registro.key().as_ref(), sku.as_bytes()],
+        bump,
+        constraint = producto.registro == registro.key() @ Errores::ProductoInvalido
+    )]
+    pub producto: Account<'info, Producto>,
+
+    #[account(
+        seeds = [b"historial_ventas_v2", cliente.key().as_ref()],
+        bump,
+        constraint = historial.cliente == cliente.key() @ Errores::HistorialInvalido
+    )]
+    pub historial: Account<'info, HistorialVentasV2>,
+
+    #[account(
+        mut,
+        seeds = [b"venta_v2", inventario.key().as_ref(), id_venta.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub venta: Account<'info, VentaInventario>,
+}
+
+#[derive(Accounts)]
+#[instruction(id_venta: u32, id_cliente: u16, sku: String)]
+pub struct DevolverVentaInventario<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    #[account(has_one = owner @ Errores::NoOwner)]
+    pub registro: Account<'info, Registro>,
+
+    #[account(
+        seeds = [b"cliente", registro.key().as_ref(), id_cliente.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub cliente: Account<'info, Cliente>,
+
+    #[account(
+        seeds = [b"inventario", registro.key().as_ref()],
+        bump,
+        constraint = inventario.registro == registro.key() @ Errores::InventarioInvalido
+    )]
+    pub inventario: Account<'info, Inventario>,
+
+    #[account(
+        mut,
+        seeds = [b"producto", registro.key().as_ref(), sku.as_bytes()],
+        bump,
+        constraint = producto.registro == registro.key() @ Errores::ProductoInvalido
+    )]
+    pub producto: Account<'info, Producto>,
+
+    #[account(
+        mut,
+        seeds = [b"historial_ventas_v2", cliente.key().as_ref()],
+        bump,
+        constraint = historial.cliente == cliente.key() @ Errores::HistorialInvalido
+    )]
+    pub historial: Account<'info, HistorialVentasV2>,
+
+    #[account(
+        mut,
+        close = owner,
+        seeds = [b"venta_v2", inventario.key().as_ref(), id_venta.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub venta: Account<'info, VentaInventario>,
 }

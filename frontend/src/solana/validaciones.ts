@@ -20,3 +20,11 @@ export const skuValido = (valor: string) => texto(valor, 'El SKU', 5);
 export const descripcionValida = (valor: string) => texto(valor, 'La descripción', 50);
 export const idValido = (valor: number) => entero(valor, 'El identificador', 65_535);
 export const montoValido = (valor: number) => entero(valor, 'El monto', 4_294_967_295);
+export const cantidadValida = (valor: number) => entero(valor, 'La cantidad', 4_294_967_295);
+export const precioUnitarioValido = (valor: number) => entero(valor, 'El precio unitario', 4_294_967_295);
+export function stockInicialValido(valor: number): number {
+  if (!Number.isSafeInteger(valor) || valor < 0 || valor > 4_294_967_295) {
+    throw new Error('La existencia inicial debe ser un entero entre 0 y 4 294 967 295.');
+  }
+  return valor;
+}

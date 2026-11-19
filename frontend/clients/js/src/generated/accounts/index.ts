@@ -7,5 +7,9 @@
  */
 
 export * from "./cliente";
+export * from "./historialVentasV2";
+export * from "./inventario";
+export * from "./producto";
 export * from "./registro";
 export * from "./venta";
+export * from "./ventaInventario";

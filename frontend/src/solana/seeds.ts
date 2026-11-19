@@ -11,4 +11,10 @@ export const s = {
     bytes.writeUInt16LE(valor, 0);
     return bytes;
   },
+  u32: (valor: number) => {
+    if (!Number.isInteger(valor) || valor < 0 || valor > 4_294_967_295) throw new Error('El identificador no cabe en u32.');
+    const bytes = Buffer.alloc(4);
+    bytes.writeUInt32LE(valor, 0);
+    return bytes;
+  },
 };

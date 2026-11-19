@@ -6,7 +6,7 @@ import { NEGOCIO_INICIAL, UNIDAD_MONTO } from '../config/interfaz';
 import { leerRegistro, type RegistroUI } from '../solana/lecturas';
 import { negocioValido } from '../solana/validaciones';
 import { ErrorTransaccion, ErrorConfirmacionPendiente, enlaceTransaccion, traducir, type OpcionesEnvio } from '../solana/tx';
-import { crearRegistro, crearCliente, registrarVenta, cambiarMonto, hacerDevolucion } from '../solana/acciones';
+import { crearRegistro, crearCliente, eliminarCliente, registrarVenta, cambiarMonto, hacerDevolucion } from '../solana/acciones';
 
 type Operacion = 'registro' | 'cliente' | 'venta' | 'monto' | 'devolucion';
 const operaciones: { id: Operacion; texto: string }[] = [
@@ -37,6 +37,8 @@ export function Registro({ onCambio, onOcupado }: { onCambio: () => void; onOcup
   const [firmaFallida, setFirmaFallida] = useState('');
   const [errorOperacion, setErrorOperacion] = useState('');
   const [aviso, setAviso] = useState('');
+  const [clientePendienteBaja, setClientePendienteBaja] = useState<RegistroUI['clientes'][number] | null>(null);
+  const dialogoBaja = useRef<HTMLDialogElement>(null);
   const contexto = useRef('');
   const secuencia = useRef(0);
   contexto.current = negocio + '|' + autoridad;
@@ -47,6 +49,10 @@ export function Registro({ onCambio, onOcupado }: { onCambio: () => void; onOcup
     setLeyendo(false); setFirma(''); setFirmaFallida(''); setErrorOperacion(''); setAviso('');
   }, [negocio, autoridad]);
   useEffect(() => { onOcupado(ocupado); return () => onOcupado(false); }, [ocupado, onOcupado]);
+  useEffect(() => {
+    const dialogo = dialogoBaja.current;
+    if (clientePendienteBaja && dialogo && !dialogo.open) dialogo.showModal();
+  }, [clientePendienteBaja]);
 
   async function cargar(nombreNegocio = negocio, owner = autoridad) {
     const clave = nombreNegocio + '|' + owner;
@@ -86,6 +92,36 @@ export function Registro({ onCambio, onOcupado }: { onCambio: () => void; onOcup
     } finally { setOcupado(false); }
   }
 
+  async function ejecutarBaja(cliente: RegistroUI['clientes'][number]) {
+    setOcupado(true); setFase('Preparando baja del cliente…'); setFirma(''); setFirmaFallida(''); setErrorOperacion(''); setAviso('');
+    const nombreNegocio = negocio.trim();
+    const direccionWallet = walletDireccion;
+    const opciones: OpcionesEnvio = {
+      onEstado: (estado) => setFase(
+        estado === 'firma'
+          ? 'Revisa la solicitud en tu wallet…'
+          : 'Esperando confirmación de la red…'
+      ),
+    };
+    try {
+      const resultado = await eliminarCliente(wallet, connection, nombreNegocio, cliente.idCliente, opciones);
+      setFirma(resultado); setFase('Cliente dado de baja correctamente.'); onCambio();
+      try { await cargar(nombreNegocio, direccionWallet); }
+      catch { setAviso('La baja se confirmó, pero no pudimos actualizar el registro. Pulsa Consultar registro para volver a leerlo.'); }
+    } catch (error) {
+      setFase(''); setErrorOperacion(traducir(error));
+      if (error instanceof ErrorTransaccion || error instanceof ErrorConfirmacionPendiente) setFirmaFallida(error.firma);
+    } finally { setOcupado(false); }
+  }
+
+  function confirmarBaja() {
+    if (!clientePendienteBaja || ocupado || !permiteEscribir) return;
+    const cliente = clientePendienteBaja;
+    dialogoBaja.current?.close();
+    setClientePendienteBaja(null);
+    void ejecutarBaja(cliente);
+  }
+
   const esOtraAutoridad = !!autoridad.trim() && autoridad.trim() !== walletDireccion;
   const permiteEscribir = !programa.esReferencia && !!wallet.publicKey && !esOtraAutoridad;
   return <>
@@ -105,7 +141,7 @@ export function Registro({ onCambio, onOcupado }: { onCambio: () => void; onOcup
           <div className="registry-summary"><div><span className="label">Negocio</span><strong>{registro.nombreNegocio}</strong></div><div><span className="label">Último ID asignado</span><strong>{registro.idCounter}</strong></div></div>
           <details className="technical-details"><summary>Dirección del registro</summary><code className="address">{registro.direccion}</code></details>
           {registro.clientes.length === 0 ? <p className="empty-line">Todavía no hay clientes. Puedes crear el primero desde Operaciones.</p> : registro.clientes.map((cliente) => <article className="customer" key={cliente.direccion}>
-            <header><div><strong>{cliente.nombre}</strong><span className="small-note">Cliente #{cliente.idCliente} · {cliente.compras} ventas activas</span></div><button className="text-button" disabled={ocupado} onClick={() => { setIdCliente(String(cliente.idCliente)); setOp('venta'); }}>Seleccionar</button></header>
+            <header><div><strong>{cliente.nombre}</strong><span className="small-note">Cliente #{cliente.idCliente} · {cliente.compras} ventas activas</span></div><div className="customer-actions"><button className="text-button" disabled={ocupado} onClick={() => { setIdCliente(String(cliente.idCliente)); setOp('venta'); }}>Seleccionar</button><button className="text-button danger-button" disabled={ocupado || !permiteEscribir} onClick={() => setClientePendienteBaja(cliente)}>Dar de baja</button></div></header>
             {cliente.ventas.length === 0 ? <p className="empty-line">Sin ventas activas.</p> : <div className="table-wrap"><table><thead><tr><th>SKU</th><th>Descripción</th><th className="numeric">Importe</th></tr></thead><tbody>{cliente.ventas.map((venta) => <tr key={venta.direccion} onClick={() => { if (!ocupado) { setIdCliente(String(cliente.idCliente)); setSku(venta.sku); setMonto(String(venta.monto)); setOp('monto'); } }}><td><code>{venta.sku}</code></td><td>{venta.descripcion}</td><td className="numeric">{venta.monto.toLocaleString('es-MX')} <small>{UNIDAD_MONTO}</small></td></tr>)}</tbody></table></div>}
           </article>)}
         </>}
@@ -131,5 +167,32 @@ export function Registro({ onCambio, onOcupado }: { onCambio: () => void; onOcup
         {aviso && <p className="notice subtle">{aviso}</p>}
       </section>
     </div>
+    <dialog
+      className="confirmation-dialog"
+      ref={dialogoBaja}
+      aria-labelledby="confirmar-baja-title"
+      aria-describedby="confirmar-baja-description"
+      onCancel={() => setClientePendienteBaja(null)}
+      onClose={() => setClientePendienteBaja(null)}
+    >
+      {clientePendienteBaja && <div className="confirmation-content">
+        <div className="confirmation-heading">
+          <span className="confirmation-icon" aria-hidden="true">!</span>
+          <div><p className="eyebrow">ACCIÓN IRREVERSIBLE</p><h2 id="confirmar-baja-title">¿Dar de baja a este cliente?</h2></div>
+        </div>
+        <p id="confirmar-baja-description" className="confirmation-description">
+          Estás por cerrar la cuenta de <strong>{clientePendienteBaja.nombre}</strong> (cliente #{clientePendienteBaja.idCliente}).
+        </p>
+        <ul className="confirmation-details">
+          <li>Solo se permite si no tiene ventas V1 ni V2 activas.</li>
+          <li>La renta recuperada se enviará a tu wallet.</li>
+          <li>El ID no se reutilizará y esta acción no se puede deshacer.</li>
+        </ul>
+        <div className="confirmation-actions">
+          <button className="button secondary" type="button" onClick={() => dialogoBaja.current?.close()}>Cancelar</button>
+          <button className="button confirmation-danger" type="button" disabled={ocupado || !permiteEscribir} onClick={confirmarBaja}>Confirmar baja</button>
+        </div>
+      </div>}
+    </dialog>
   </>;
 }
