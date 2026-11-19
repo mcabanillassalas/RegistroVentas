@@ -61,7 +61,9 @@ Para el flujo basado en GitHub, este paso va **antes** de importar el proyecto e
 ## 3. Importar el repositorio publicado en Solana Playground
 
 1. Abre [Solana Playground](https://beta.solpg.io/).
-2. Importa la URL de tu repositorio standalone actualizado, no el monorepo completo ni la versión original sin tus cambios. La URL de importación sigue el formato `https://beta.solpg.io/https://github.com/TU_USUARIO/TU_REPOSITORIO`.
+2. Importa la URL de tu repositorio standalone actualizado, no el monorepo completo ni la versión original sin tus cambios. La URL de importación sigue el formato 
+`https://beta.solpg.io/https://github.com/mcabanillassalas/RegistroVentas/tree/main/backend`
+
 3. Guarda el proyecto importado con un nombre que identifique la versión. No sobrescribas la única copia del proyecto anterior.
 4. Comprueba en el editor que `src/lib.rs` es el contenido recién publicado y que incluye `eliminar_cliente` y las instrucciones de Inventario V2.
 5. Conecta en Playground la wallet que corresponde a la autoridad de actualización y selecciona **Devnet**. Revisa la dirección de la wallet conectada antes de firmar.
@@ -188,6 +190,8 @@ El Program ID, el IDL y las firmas son datos públicos. **No** publiques frases 
 | Síntoma | Qué revisar |
 | --- | --- |
 | Playground compila, pero el IDL no tiene `eliminarCliente` o Inventario V2 | Se compiló una copia antigua; vuelve a cargar `backend/src/lib.rs`, compila y despliega esa versión. |
+| `system_program` no está declarado o `AccountInfo` no tiene `resize` | Usa el código actualizado de `backend/src/lib.rs`: importa `anchor_lang::system_program` y cierra el historial con `realloc(0, false)`. Publica la corrección en el repo standalone y vuelve a importarlo antes de compilar. |
+| Airdrop automático falla con RPC error 410 | El faucet automático de Playground está cerrado. Solicita SOL de Devnet en [faucet.solana.com](https://faucet.solana.com/) para la wallet conectada a Playground. Para dejar de ver el intento automático, ejecuta en su terminal `setting set wallet.automaticAirdrop false`. |
 | El despliegue rechaza la firma por autoridad | La wallet conectada no es la autoridad de actualización. Para conservar el Program ID/datos existentes, solicita la wallet correcta. |
 | El Program ID de `programa.json` no coincide con Playground | Reimporta el IDL del programa desplegado y regenera el cliente antes de iniciar la app. |
 | La app muestra el programa de referencia o bloquea consultas | El IDL no se importó correctamente; revisa `idl.json`, `programa.json` y ejecuta `npm run comprobar:idl`. |

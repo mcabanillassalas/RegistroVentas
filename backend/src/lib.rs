@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_lang::system_program;
 
 declare_id!("4dJoKhvY2XC6WpHv8b7RCHKsTfUpGpELiDjAjf4grcE3");
 
@@ -500,7 +501,7 @@ fn cerrar_cuenta_programa(cuenta: &AccountInfo, destino: &AccountInfo) -> Result
     destino.add_lamports(cuenta.lamports())?;
     cuenta.sub_lamports(cuenta.lamports())?;
     cuenta.assign(&system_program::ID);
-    cuenta.resize(0)?;
+    cuenta.realloc(0, false)?;
     Ok(())
 }
 
