@@ -4,6 +4,8 @@
 
 Frontend educativo desarrollado con **TypeScript y React** para interactuar con el programa [Registro de Ventas con PDAs](https://github.com/WayLearnLatam/Registro-Ventas-Solana-PDA) en **Solana Devnet**.
 
+> **Versión de este monorepo:** este frontend conserva el flujo guiado V1 y además integra Inventario V2 (catálogo, stock, ventas por cantidad, ajustes y devoluciones con reposición) y la baja confirmada de clientes sin ventas activas. Está configurado para el Program ID `4dJoKhvY2XC6WpHv8b7RCHKsTfUpGpELiDjAjf4grcE3`, desplegado en Devnet. El [README general](../README.md) explica el antes/después; el [flujograma](../flujograma.md) describe el despliegue y la sincronización de IDL y cliente.
+
 Forma parte del **Solana Engineering Track: Advanced** de WayLearn. Aquí conectamos lo aprendido sobre cuentas, instrucciones y PDAs con una aplicación que se utiliza desde el navegador.
 
 Puedes comenzar haciendo **Fork** de este repositorio. Hemos preparado un entorno de **GitHub Codespaces** para que puedas concentrarte en los ejercicios sin instalar las herramientas del frontend en tu computadora. 🚀
@@ -16,6 +18,8 @@ Puedes comenzar haciendo **Fork** de este repositorio. Hemos preparado un entorn
 - Consultar un registro de ventas, sus clientes y las ventas activas de cada uno.
 - Crear un negocio y dar de alta a sus clientes.
 - Registrar ventas, corregir su importe y realizar devoluciones.
+- Administrar productos y existencias en Inventario V2; registrar ventas de varias unidades, ajustar cantidades y devolverlas con reposición del stock.
+- Dar de baja un cliente sin ventas activas, con confirmación; el programa rechaza la operación si existen ventas V1 o V2 pendientes.
 - Revisar solicitudes de firma, confirmaciones y errores de las transacciones.
 
 El recorrido del proyecto sigue esta relación:
@@ -27,6 +31,8 @@ Cada entidad tiene su propia cuenta. El frontend deriva sus direcciones y utiliz
 > ℹ️ El importe de una venta es un dato del ejercicio: **no cobra ni transfiere SOL o tokens**. La devolución elimina la venta del historial activo y cierra su cuenta; no realiza un reembolso comercial.
 
 ## Antes de comenzar
+
+> Las instrucciones de Fork/Codespaces de abajo describen el frontend standalone del bootcamp. Para trabajar con la versión integrada de este monorepo, sigue los comandos y enlaces del [README general](../README.md); no clones el repositorio original si quieres conservar las mejoras de este proyecto.
 
 Necesitas una cuenta de GitHub y, para las operaciones que requieren firma, una wallet de navegador compatible con Solana y SOL de prueba en **Devnet**.
 
@@ -90,7 +96,7 @@ El frontend y el programa son dos partes del mismo proyecto:
 
 ### Si aparece «programa de referencia»
 
-El repositorio incluye un **IDL de referencia** para estudiar la estructura y generar el cliente. Con esa configuración puedes conectar tu wallet y consultar saldos; la consulta del registro y sus operaciones permanecen bloqueadas hasta importar el IDL del despliegue que utilizarás.
+El proyecto base puede incluir un **IDL de referencia** para estudiar la estructura y generar el cliente. En la versión integrada de este monorepo, el frontend está configurado para el despliegue de Devnet indicado al inicio. Si la configuración local marca el programa como referencia, las operaciones del registro permanecerán bloqueadas hasta importar el IDL del despliegue que utilizarás.
 
 Si la versión de clase ya viene configurada para el programa correspondiente, puedes continuar con las actividades sin repetir este paso.
 
@@ -157,6 +163,8 @@ Este comando comprueba TypeScript, ejecuta las pruebas automatizadas y genera el
 
 Para tu primera prueba, crea un negocio, agrega un cliente, registra una venta y consulta el resultado. Después prueba corregir el importe, devolver la venta y cancelar una solicitud de firma.
 
+Para comprobar Inventario V2 y la baja de clientes, consulta el alcance, las condiciones y los casos de aceptación en [mejoras-funcionales.md](../mejoras-funcionales.md), además de verificar las transacciones correspondientes en Devnet.
+
 ## Si algo no funciona
 
 | Situación | Qué revisar |
@@ -164,7 +172,7 @@ Para tu primera prueba, crea un negocio, agrega un cliente, registra una venta y
 | La wallet no aparece | Abre la app en una pestaña normal del navegador con una extensión compatible instalada. |
 | Falta SOL de prueba | Solicítalo en [Solana Faucet](https://faucet.solana.com/), seleccionando Devnet. |
 | No aparece tu negocio | Comprueba el nombre exacto y la dirección de su autoridad; ambos participan en la PDA. |
-| No puedes repetir un SKU | Cada cliente solo puede tener una venta activa con ese SKU. |
+| No puedes repetir un SKU en ventas V1 | En V1, cada cliente solo puede tener una venta activa por SKU. Inventario V2 utiliza IDs de venta únicos y admite ventas repetidas del mismo SKU. |
 | El RPC responde con un límite de uso | Espera y vuelve a intentar, o configura otro endpoint de Devnet en `.env.local` siguiendo `.env.example`. |
 | Cambiaste el IDL y falla la comprobación | Ejecuta `npm run cliente` y reinicia el servidor. |
 

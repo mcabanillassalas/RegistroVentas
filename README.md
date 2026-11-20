@@ -7,6 +7,14 @@ Proyecto educativo de registro de ventas en Solana. Este repositorio reúne los 
 
 El backend no es un servidor HTTP: una vez desplegado, sus instrucciones se ejecutan en Solana. El frontend se ejecuta en el navegador y se conecta al programa mediante un RPC.
 
+**Estado actual:** el backend actualizado está desplegado y funcional en **Solana Devnet**. El frontend se conecta al mismo Program ID: `4dJoKhvY2XC6WpHv8b7RCHKsTfUpGpELiDjAjf4grcE3`. No es necesario volver a compilar ni desplegar el programa para iniciar una nueva sesión de trabajo; basta con ejecutar el frontend.
+
+## Antes y después de las mejoras
+
+**Proyecto de partida:** el registro guiado administra negocios, clientes y ventas V1: crea registros y clientes, registra una venta por SKU activo y cliente, permite corregir el importe y devolver la venta. La versión original utilizada como punto de partida no implementaba la baja de clientes; esta función se añadió a este proyecto.
+
+**Estado actual y mejoras propias:** se conserva ese flujo V1 y se agregaron dos mejoras funcionales integradas en backend y frontend: **Inventario V2**, con productos, existencias, ventas por cantidad, ajustes y devoluciones con reposición; y **baja de clientes**, condicionada a que no existan ventas V1 ni V2 activas. Ambas utilizan el programa desplegado en Devnet.
+
 ## Estructura
 
 ```text
@@ -65,12 +73,13 @@ Consulta las instrucciones específicas de cada parte:
 
 ## Flujo general
 
-1. Compila y despliega la versión requerida del programa backend en **Devnet** desde Solana Playground.
-2. Exporta el IDL de ese mismo binario desplegado.
-3. Importa ese IDL en el frontend y genera el cliente TypeScript.
-4. Ejecuta el frontend y realiza operaciones con una wallet configurada en Devnet.
+El programa permanece desplegado en Devnet y se ejecuta en la red; no hay que iniciar un proceso de backend local. Para utilizar la aplicación:
 
-El código local incluye el contrato V2, pero el IDL local aún debe reemplazarse por la exportación oficial del binario V2 desplegado. La compilación local no confirma que Devnet ya admita las instrucciones V2. Antes de probar inventario en Devnet, confirma que tienes la autoridad de actualización del programa, despliega la versión nueva, exporta su IDL y regenera el cliente. El Program ID, el IDL y el cliente generado deben corresponder al mismo programa y versión.
+1. Inicia el frontend desde `frontend/` con `npm run dev`.
+2. Abre `http://localhost:5173` y conecta una wallet configurada en Devnet.
+3. Usa el Program ID indicado arriba. La wallet necesita SOL de prueba para enviar transacciones y debe ser la autoridad del registro para realizar operaciones de escritura.
+
+El despliegue no se repite al cerrar o reiniciar el frontend. Solo se debe compilar y actualizar el programa desde Solana Playground cuando haya cambios nuevos en el código on-chain. El IDL y el cliente TypeScript incluidos en el repositorio son los que utiliza el frontend para construir las instrucciones; deben mantenerse versionados junto con la configuración del mismo Program ID para que otros puedan reproducir la aplicación.
 
 Para desarrollo local del frontend, abre PowerShell:
 
@@ -109,7 +118,7 @@ No es necesario dejar un validador local de WSL ejecutándose para utilizar el d
 
    ```powershell
    git init -b main
-   git add README.md mejoras-funcionales.md .gitignore backend frontend
+   git add README.md mejoras-funcionales.md flujograma.md .gitignore backend frontend
    git status --short
    git diff --cached --stat
    ```
