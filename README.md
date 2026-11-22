@@ -24,8 +24,15 @@ RegistroVentas/
 ├── .gitignore
 ├── mejoras-funcionales.md # Diseño y límites de las mejoras funcionales
 ├── flujograma.md # Pasos de despliegue del backend y conexión del frontend
-└── README.md
+├── README.md
+└── evidencia/ # carpeta de capturas de evidencia
 ```
+
+## Evidencias
+
+En la carpeta **evidencia** se puede apreciar las capturas de las diversas fases
+de la implementacion build, deploy, upgrade. Asi como tambien evidencias de las 
+nuevas funcionalidades y registro de las transacciones en Solana Explorer.
 
 ## Mejoras funcionales: inventario V2 y baja de clientes
 
