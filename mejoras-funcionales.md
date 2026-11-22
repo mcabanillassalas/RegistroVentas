@@ -1,6 +1,6 @@
 # Mejoras funcionales: control de inventario integrado con ventas
 
-**Estado:** implementación local terminada; falta compilar/desplegar el programa actualizado y probar las operaciones nuevas en Devnet.
+**Estado (22 de noviembre de 2026):** el programa actualizado se confirmó en Devnet, Program ID `4dJoKhvY2XC6WpHv8b7RCHKsTfUpGpELiDjAjf4grcE3`, slot `525118972` ([transacción](https://explorer.solana.com/tx/4T8A3SgWeFvtgYSgQZaRha2BpJj7zDHhhdYt7JqL7gmdWAhigaMc9yV9ooPj1WiKGqNhvr8HxYrAMNzsaqabwNe2?cluster=devnet)). Se reportó que Inventario V2 pudo inicializarse desde el frontend. Los flujos de productos, ventas V2, ajustes, devoluciones y baja aún deben completarse en pruebas manuales de Devnet.
 
 ## 1. Objetivo
 
@@ -22,8 +22,8 @@ Los importes son datos internos del ejercicio. **No representan una transferenci
 - El historial V2 se crea automáticamente antes de la primera venta de inventario de cada cliente existente; esa primera operación puede pedir dos firmas (inicializar historial y registrar venta).
 - Se añadieron pruebas unitarias de cálculo de total/stock y pruebas de PDA, serialización, roles, límites y traducción de errores.
 - Validación local ejecutada: `npm --prefix .\frontend run verificar` (12 pruebas, TypeScript, verificación del contrato y build) y `cargo test` en `backend` (5 pruebas), además de `rustfmt --check`.
-- **El IDL de `frontend/idl.json` sigue siendo el contrato local ampliado, no una exportación del binario V2 desplegado.** El build local no demuestra que Devnet tenga las instrucciones nuevas. No se ha ejecutado `anchor build`, despliegue ni una prueba on-chain de inventario.
-- El siguiente paso externo es compilar y desplegar mediante el flujo del proyecto (Solana Playground), solo después de comprobar que se dispone de la autoridad de actualización del Program ID activo. Luego hay que exportar el IDL oficial, regenerar el cliente y ejecutar los casos de Devnet de la sección 9.
+- `frontend/idl.json` y el cliente generado incluyen las instrucciones V2, y `frontend/src/config/programa.json` apunta al Program ID desplegado. La firma de upgrade confirma el binario on-chain; si se modifica la interfaz Anchor, vuelve a exportar el IDL del programa desplegado, regenera el cliente y ejecuta `npm run verificar`.
+- El siguiente paso es completar las pruebas manuales de Devnet de la sección 9. No hace falta volver a desplegar para probar las funciones ya incluidas.
 
 ## 2. Contexto de V1 y restricciones que condicionaron el diseño
 
@@ -212,18 +212,18 @@ La estrategia recomendada es aditiva:
 
 - La suite local cubre PDA/seeds V2, serialización y roles del builder, validación de cantidades/existencias iniciales, contrato IDL y traducción de errores.
 - `npm --prefix .\frontend run verificar` pasó con 11 pruebas, TypeScript, verificación de IDL y build.
-- La interfaz se abrió localmente y la navegación a Inventario se comprobó. Probar la app en Devnet sigue pendiente; el simulador/local build no sustituye la verificación on-chain.
+- La interfaz se abrió localmente y la navegación a Inventario se comprobó. El upgrade on-chain fue confirmado y se reportó la inicialización del inventario; los demás flujos V2 todavía deben probarse desde la app y verificarse por sus firmas en Explorer.
 
 `cargo test` pasa 3 pruebas de aritmética para total y cambios de stock; `rustfmt --check` también pasó. Las restricciones de cuentas y flujos completos aún requieren pruebas on-chain. El test existente `backend/tests/anchor.test.ts` llama a `initialize`, que no corresponde a RegistroVentas, por lo que no es evidencia del flujo V2.
 
-## 10. Siguientes pasos para completar el despliegue
+## 10. Siguientes pasos
 
-1. **Confirmar la autoridad de actualización** del Program ID activo y contar con SOL de Devnet para el despliegue.
-2. **Compilar el programa actualizado** con el toolchain compatible del proyecto y resolver cualquier diferencia que aparezca fuera de `cargo test`.
-3. **Desplegar en Devnet** mediante Solana Playground o el flujo acordado, sin exponer ni compartir keypairs.
-4. **Exportar el IDL oficial** del programa desplegado, sustituir el contrato local manual, regenerar el cliente y ejecutar `npm --prefix .\frontend run verificar`.
-5. **Validar en Devnet** los escenarios de la sección 9: crear/reabastecer producto, ventas repetidas del mismo SKU, falta de stock, ajuste y devolución con reposición.
-6. **Actualizar este documento** con el IDL/Program ID activos, firmas de transacciones y resultados reales. Hasta entonces, los criterios de aceptación on-chain siguen pendientes.
+1. Ejecutar desde el frontend una prueba controlada de creación de producto y reabastecimiento.
+2. Probar ventas V2 con stock suficiente e insuficiente; comprobar que las ventas confirmadas actualizan stock e historial como se espera.
+3. Probar ajuste y devolución, verificando el cambio de stock y las firmas en Explorer.
+4. Completar pruebas V1 y baja de clientes con cuentas temporales; no probar la baja irreversible con clientes importantes.
+5. Si cambia el contrato, exportar el IDL posterior al despliegue, regenerar el cliente y ejecutar `npm --prefix .\frontend run verificar`.
+6. Registrar en este documento y en la guía de onboarding las firmas y los resultados observados.
 
 ## 11. Criterios de aceptación
 

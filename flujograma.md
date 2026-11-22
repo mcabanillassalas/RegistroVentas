@@ -2,7 +2,7 @@
 
 Esta guía describe cómo desplegar en **Devnet** el backend actualizado de RegistroVentas y conectar el frontend al mismo programa. Incluye Inventario V2 y la instrucción `eliminar_cliente`.
 
-> **Estado:** los cambios están implementados localmente, pero todavía se debe confirmar el despliegue actualizado en Devnet. El IDL del frontend no es evidencia de que el programa desplegado ya contenga estas instrucciones.
+> **Estado (22 de noviembre de 2026):** el upgrade del Program ID `4dJoKhvY2XC6WpHv8b7RCHKsTfUpGpELiDjAjf4grcE3` se confirmó en Devnet, slot `525118972`, mediante la [transacción de actualización](https://explorer.solana.com/tx/4T8A3SgWeFvtgYSgQZaRha2BpJj7zDHhhdYt7JqL7gmdWAhigaMc9yV9ooPj1WiKGqNhvr8HxYrAMNzsaqabwNe2?cluster=devnet). Se reportó una inicialización exitosa de Inventario V2 desde el frontend; el resto de recorridos V2 aún requiere pruebas manuales. Esta guía describe el flujo para futuras actualizaciones.
 
 ## Diagrama de decisiones
 
@@ -69,6 +69,7 @@ Para el flujo basado en GitHub, este paso va **antes** de importar el proyecto e
 5. Conecta en Playground la wallet que corresponde a la autoridad de actualización y selecciona **Devnet**. Revisa la dirección de la wallet conectada antes de firmar.
 6. Conserva el Program ID actual si vas a actualizar el programa existente. Verifica que `declare_id!` y la configuración/key del programa en Playground correspondan al Program ID elegido. No generes uno nuevo accidentalmente.
 7. El Program ID de la fuente importada debe coincidir con la decisión tomada antes de publicar. Si no coincide, no compiles ni despliegues: actualiza el código local, publícalo e importa esa versión.
+8. Si Playground permite introducir un Program ID personalizado, aplícalo con **Change program ID** y confirma que muestre **Updated program ID** junto al ID esperado. Ver el texto en el campo, por sí solo, no acredita que ese sea el destino del upgrade.
 
 > Si Playground muestra errores de dependencia o de versión de Anchor, no cambies versiones al azar. Comprueba el `Cargo.toml` del proyecto Playground y resuelve la compatibilidad con el toolchain de ese entorno antes de desplegar.
 
@@ -80,9 +81,9 @@ Para el flujo basado en GitHub, este paso va **antes** de importar el proyecto e
    - la red es Devnet;
    - el Program ID es el esperado;
    - la wallet es la autoridad correcta si se trata de una actualización.
-4. Ejecuta **Deploy** y revisa la transacción en la wallet. Si la plataforma ofrece actualizar el programa existente, confirma que ese es el Program ID que deseas actualizar.
-5. Espera la confirmación de la transacción. Guarda la firma y el Program ID desplegado. Una compilación correcta, sin transacción de despliegue confirmada, **no** actualiza el programa de Devnet.
-6. Abre el Program ID en Explorer con el clúster **Devnet** y confirma que el programa existe y que la transacción de despliegue/actualización terminó correctamente. Si el despliegue falla por falta de autoridad, no cambies a otro ID sin decidir antes qué ocurrirá con los datos anteriores.
+4. Ejecuta **Upgrade** al actualizar el programa existente (o **Deploy** solo si vas a crear un programa nuevo) y revisa la transacción en la wallet.
+5. Espera la confirmación y guarda la firma. La transacción debe indicar que actualizó el Program ID esperado; el mensaje final de Playground no basta.
+6. Abre el Program ID/ProgramData en Explorer con el clúster **Devnet** y confirma que el slot de despliegue avanzó. Si el despliegue falla por falta de autoridad o apunta a otro ID, no sigas ni cambies a un programa nuevo sin decidir qué ocurrirá con las cuentas existentes.
 
 ## 5. Exportar el IDL del programa desplegado
 

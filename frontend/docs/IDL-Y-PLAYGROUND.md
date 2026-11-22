@@ -6,7 +6,7 @@ El IDL describe las instrucciones, sus argumentos y las estructuras de cuentas d
 
 Exporta el IDL del mismo código que se compiló y desplegó en Devnet. El proyecto admite el formato legacy de Anchor y el formato moderno con `address`, discriminadores y definiciones en `types`, siempre que describan el modelo del bootcamp.
 
-El IDL incluido procede del material de referencia de David y utiliza la dirección `38oTMyvUTmqkBQeMiuok5F2mPjp9dVadWdBeQTDNmTUY`. Sirve para generar y estudiar el cliente. No se presupone que sea tu despliegue ni que esté disponible: el proyecto bloquea sus operaciones del registro.
+El IDL actual está importado como contrato del participante; `frontend/src/config/programa.json` apunta a `4dJoKhvY2XC6WpHv8b7RCHKsTfUpGpELiDjAjf4grcE3` y no lo marca como referencia. El upgrade de ese programa se confirmó en Devnet en el slot `525118972` ([transacción](https://explorer.solana.com/tx/4T8A3SgWeFvtgYSgQZaRha2BpJj7zDHhhdYt7JqL7gmdWAhigaMc9yV9ooPj1WiKGqNhvr8HxYrAMNzsaqabwNe2?cluster=devnet)). El IDL describe lo que el frontend espera; al cambiar el contrato, vuelve a exportarlo desde el programa actualizado y regenera el cliente. Un IDL local, por sí solo, no demuestra qué binario está desplegado.
 
 ## Contrato que espera la app
 
