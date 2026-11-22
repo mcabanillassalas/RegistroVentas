@@ -7,13 +7,13 @@ Proyecto educativo de registro de ventas en Solana. Este repositorio reúne los 
 
 El backend no es un servidor HTTP: una vez desplegado, sus instrucciones se ejecutan en Solana. El frontend se ejecuta en el navegador y se conecta al programa mediante un RPC.
 
-**Estado actual:** el backend actualizado está desplegado y funcional en **Solana Devnet**. El frontend se conecta al mismo Program ID: `4dJoKhvY2XC6WpHv8b7RCHKsTfUpGpELiDjAjf4grcE3`. No es necesario volver a compilar ni desplegar el programa para iniciar una nueva sesión de trabajo; basta con ejecutar el frontend.
+**Estado actual:** el programa está desplegado en **Solana Devnet** con el Program ID `4dJoKhvY2XC6WpHv8b7RCHKsTfUpGpELiDjAjf4grcE3`. Sin embargo, la simulación reciente de `inicializar_inventario` devuelve `InstructionFallbackNotFound` (Anchor 101): el binario que responde en Devnet aún no reconoce esa instrucción V2. Por ello, Inventario V2 todavía no está verificado como funcional on-chain; se debe actualizar el mismo Program ID con la versión correcta del backend y repetir las pruebas. Mientras tanto, no es necesario volver a desplegar para iniciar el frontend ni para usar instrucciones que ya estén disponibles en el programa.
 
 ## Antes y después de las mejoras
 
 **Proyecto de partida:** el registro guiado administra negocios, clientes y ventas V1: crea registros y clientes, registra una venta por SKU activo y cliente, permite corregir el importe y devolver la venta. La versión original utilizada como punto de partida no implementaba la baja de clientes; esta función se añadió a este proyecto.
 
-**Estado actual y mejoras propias:** se conserva ese flujo V1 y se agregaron dos mejoras funcionales integradas en backend y frontend: **Inventario V2**, con productos, existencias, ventas por cantidad, ajustes y devoluciones con reposición; y **baja de clientes**, condicionada a que no existan ventas V1 ni V2 activas. Ambas utilizan el programa desplegado en Devnet.
+**Estado actual y mejoras propias:** se conserva ese flujo V1 y se agregaron dos mejoras funcionales en backend y frontend: **Inventario V2**, con productos, existencias, ventas por cantidad, ajustes y devoluciones con reposición; y **baja de clientes**, condicionada a que no existan ventas V1 ni V2 activas. La simulación actual confirma que el despliegue de Devnet todavía no incluye la instrucción para inicializar Inventario V2, por lo que esas funciones requieren actualizar el programa y validarse nuevamente on-chain antes de considerarlas operativas en Devnet.
 
 ## Estructura
 
@@ -73,13 +73,13 @@ Consulta las instrucciones específicas de cada parte:
 
 ## Flujo general
 
-El programa permanece desplegado en Devnet y se ejecuta en la red; no hay que iniciar un proceso de backend local. Para utilizar la aplicación:
+El programa está desplegado en Devnet y se ejecuta en la red; no hay que iniciar un proceso de backend local. Para utilizar las instrucciones ya disponibles o, después de actualizarlo, las nuevas funciones:
 
 1. Inicia el frontend desde `frontend/` con `npm run dev`.
 2. Abre `http://localhost:5173` y conecta una wallet configurada en Devnet.
 3. Usa el Program ID indicado arriba. La wallet necesita SOL de prueba para enviar transacciones y debe ser la autoridad del registro para realizar operaciones de escritura.
 
-El despliegue no se repite al cerrar o reiniciar el frontend. Solo se debe compilar y actualizar el programa desde Solana Playground cuando haya cambios nuevos en el código on-chain. El IDL y el cliente TypeScript incluidos en el repositorio son los que utiliza el frontend para construir las instrucciones; deben mantenerse versionados junto con la configuración del mismo Program ID para que otros puedan reproducir la aplicación.
+El despliegue no se repite al cerrar o reiniciar el frontend. Para habilitar la versión actualizada de Inventario V2, primero hay que publicar/importar en Playground el backend que contiene sus instrucciones, actualizar el mismo Program ID y repetir las pruebas de Devnet. Después, el IDL y el cliente TypeScript deben corresponder al programa actualizado y mantenerse versionados junto con la configuración del mismo Program ID.
 
 Para desarrollo local del frontend, abre PowerShell:
 

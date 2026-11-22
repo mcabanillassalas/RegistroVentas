@@ -81,6 +81,9 @@ function detalle(error: unknown): string {
 export function traducir(error: unknown): string {
   const texto = detalle(error);
   if (/user rejected|rejected the request|rechazaste|request rejected/i.test(texto)) return 'La firma fue cancelada en la wallet. Puedes volver a intentarlo.';
+  if (/InstructionFallbackNotFound|custom program error:\s*0x65\b|["']?Custom["']?\s*:\s*101\b/i.test(texto)) {
+    return 'El programa desplegado no reconoce esta instrucción. Actualiza en Devnet el mismo Program ID con la versión del backend que incluye Inventario V2 y vuelve a intentar.';
+  }
   if (/ConstraintSeeds|seeds constraint/i.test(texto)) return 'Las cuentas no corresponden a las semillas esperadas. Revisa negocio, autoridad, cliente y SKU.';
   if (/AccountNotInitialized|does not exist|Account does not exist/i.test(texto)) return 'No se encontró una de las cuentas requeridas. Comprueba que el registro, inventario, cliente y producto estén inicializados.';
   if (/already in use|already initialized/i.test(texto)) return 'La cuenta ya existe. Comprueba si el registro, inventario o producto ya fueron inicializados, o si la venta V1 de ese SKU sigue activa.';

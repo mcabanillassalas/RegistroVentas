@@ -171,6 +171,7 @@ test('validaciones de UI comprueban bytes UTF-8 y enteros positivos', () => {
 
 test('los errores distinguen cancelacion, autoridad, semillas y RPC', () => {
   assert.match(traducir(new Error('User rejected the request')), /cancelada/);
+  assert.match(traducir(new Error('InstructionFallbackNotFound (custom program error: 0x65)')), /no reconoce esta instrucción/);
   assert.match(traducir(new Error('custom program error: 0x1770')), /NoOwner/);
   assert.match(traducir(new Error('custom program error: 0x1779')), /StockInsuficiente/);
   assert.match(traducir(new Error('custom program error: 0x1782')), /ClienteConVentas/);
